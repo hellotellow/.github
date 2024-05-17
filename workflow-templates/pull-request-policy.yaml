@@ -1,0 +1,46 @@
+name: 'Lint PR'
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+
+permissions:
+  pull-requests: write
+
+jobs:
+  main:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        id: lint_pr_title
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: marocchino/sticky-pull-request-comment@v2
+        if: always() && (steps.lint_pr_title.outputs.error_message != null)
+        with:
+          header: pr-title-lint-error
+          message: |
+            Hey there and thank you for opening this pull request! 👋🏼
+
+            We require pull request to follow the [PR Title Conventions](https://www.notion.so/ageras/PR-Title-Convention-39301ea990214bb5a383b481420b42f2?pvs=4) and it looks like your proposed title needs to be adjusted.
+
+            Examples:
+              - [feat|fix|chore|security|docs]?([TLW-[0-9+]|scope]): [subject]
+              - feat(TLW-1234,email): Email verification endpoints and service
+              - docs(parser,verification): Api documentation updates for several endpoints
+              - [WIP] feat: Email verification endpoints and service
+
+            Details:
+
+            ```
+            ${{ steps.lint_pr_title.outputs.error_message }}
+            ```
+      - if: ${{ steps.lint_pr_title.outputs.error_message == null }}
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-title-lint-error
+          delete: true
