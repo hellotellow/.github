@@ -2,6 +2,10 @@ name: 'Lint PR'
 
 on:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - edited
 
 permissions:
   pull-requests: write
