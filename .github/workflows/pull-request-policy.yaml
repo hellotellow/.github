@@ -1,11 +1,10 @@
-name: 'Pull request policy'
+name: 'Tellow Pull Request Policy'
 
 on:
   pull_request:
     types:
       - opened
       - reopened
-      - edited
       - synchronize
 
 permissions:
