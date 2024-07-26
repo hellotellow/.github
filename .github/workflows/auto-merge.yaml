@@ -4,13 +4,13 @@ on:
   workflow_call:
     inputs:
       pr-url:
-        description: 'Pull Request URL: inputs.pr-url }}'
+        description: 'Pull Request URL'
         required: true
         type: string
+    secrets:
       repo-token:
-        description: 'Token for checkout and push: inputs.repo-token }}'
+        description: 'Token for checkout and push'
         required: true
-        type: string
 
 jobs:
   dependabot:
@@ -23,16 +23,16 @@ jobs:
       # will not occur.
       - name: Dependabot metadata
         id: dependabot-metadata
-        uses: dependabot/fetch-metadata@v1.1.1
+        uses: dependabot/fetch-metadata@v2.2.0
         with:
-          github-token: '${{ inputs.repo-token }}'
+          github-token: '${{ secrets.repo-token }}'
 
       # Here the PR gets approved.
       - name: Approve a PR
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ inputs.pr-url }}
-          GITHUB_TOKEN: ${{ inputs.repo-token }}'
+          GITHUB_TOKEN: ${{ secrets.repo-token }}'
 
       # Finally, this sets the PR to allow auto-merging for patch and minor
       # updates if all checks pass
@@ -41,4 +41,4 @@ jobs:
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ inputs.pr-url }}
-          GITHUB_TOKEN: ${{ inputs.repo-token }}'
+          GITHUB_TOKEN: ${{ secrets.repo-token }}'
