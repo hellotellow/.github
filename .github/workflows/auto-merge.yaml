@@ -27,18 +27,126 @@ jobs:
         with:
           github-token: ${{ secrets.repo-token }}
 
-      # Here the PR gets approved.
-      - name: Approve a PR
-        run: gh pr review --approve "$PR_URL"
+      # fetch-metadata only checks the first commit. Every commit on the branch
+      # must be authored by Dependabot and signed by GitHub, and the head that
+      # was checked here is the one the approval and the merge are bound to.
+      # The author alone can be set by anyone who pushes; a GitHub (web-flow)
+      # signature is only applied when the author was not overridden.
+      - name: Verify every commit comes from Dependabot
+        id: commits
+        run: |
+          set -euo pipefail
+          if [[ ! "$PR_URL" =~ ^https://[^/]+/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
+            echo "::error::pr-url is not a pull request URL"
+            exit 1
+          fi
+          repo="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+          number="${BASH_REMATCH[3]}"
+          head_sha=$(gh pr view "$PR_URL" --json headRefOid --jq .headRefOid)
+          commits=$(gh api "repos/$repo/pulls/$number/commits?per_page=100")
+          clean=$(jq --arg head "$head_sha" '
+            length > 0 and length < 100
+            and any(.[]; .sha == $head)
+            and all(.[];
+              .author.login == "dependabot[bot]"
+              and .commit.verification.verified == true
+              and (if has("committer") then .committer.login == "web-flow" else true end))
+          ' <<<"$commits")
+          if [ "$clean" != true ]; then
+            echo "::warning::The pull request has commits that were not made by Dependabot; not approving."
+          fi
+          {
+            echo "clean=$clean"
+            echo "head-sha=$head_sha"
+            echo "repo=$repo"
+            echo "number=$number"
+          } >> "$GITHUB_OUTPUT"
         env:
           PR_URL: ${{ inputs.pr-url }}
           GITHUB_TOKEN: ${{ secrets.repo-token }}
 
-      # Finally, this sets the PR to allow auto-merging for patch and minor
-      # updates if all checks pass
+      # Here the PR gets approved, on the commit that was verified.
+      - name: Approve a PR
+        id: approve
+        if: ${{ steps.commits.outputs.clean == 'true' }}
+        run: |
+          set -euo pipefail
+          review_id=$(
+            jq -n --arg sha "$HEAD_SHA" '{
+              commit_id: $sha,
+              event: "APPROVE",
+              body: ("Approved by the Dependabot auto-merge workflow at " + $sha + ".")
+            }' \
+              | gh api --method POST "repos/$REPO/pulls/$NUMBER/reviews" --input - \
+              | jq -r .id
+          )
+          echo "review-id=$review_id" >> "$GITHUB_OUTPUT"
+        env:
+          HEAD_SHA: ${{ steps.commits.outputs.head-sha }}
+          REPO: ${{ steps.commits.outputs.repo }}
+          NUMBER: ${{ steps.commits.outputs.number }}
+          GITHUB_TOKEN: ${{ secrets.repo-token }}
+
+      # Finally, this sets the PR to auto-merge for patch updates if all checks
+      # pass. The merge is refused if the head is no longer the verified commit.
       - name: Enable auto-merge for Dependabot PRs
-        if: ${{ steps.dependabot-metadata.outputs.update-type != 'version-update:semver-minor' && steps.dependabot-metadata.outputs.update-type != 'version-update:semver-major' }}
-        run: gh pr merge --auto --squash "$PR_URL"
+        if: ${{ steps.commits.outputs.clean == 'true' && steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch' }}
+        run: gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" "$PR_URL"
+        env:
+          PR_URL: ${{ inputs.pr-url }}
+          HEAD_SHA: ${{ steps.commits.outputs.head-sha }}
+          GITHUB_TOKEN: ${{ secrets.repo-token }}
+
+      - name: Withdraw the approval
+        if: ${{ failure() && steps.approve.outputs.review-id != '' }}
+        run: |
+          jq -n '{message: "The pull request head changed after it was verified.", event: "DISMISS"}' \
+            | gh api --method PUT "repos/$REPO/pulls/$NUMBER/reviews/$REVIEW_ID/dismissals" --input -
+        env:
+          REPO: ${{ steps.commits.outputs.repo }}
+          NUMBER: ${{ steps.commits.outputs.number }}
+          REVIEW_ID: ${{ steps.approve.outputs.review-id }}
+          GITHUB_TOKEN: ${{ secrets.repo-token }}
+
+  # A push by someone with write access leaves auto-merge armed and the
+  # approval above in place, and the job above does not run for it. Take both
+  # back once a Dependabot pull request holds a commit Dependabot did not make.
+  withdraw:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    steps:
+      - name: Withdraw approval and auto-merge
+        run: |
+          set -euo pipefail
+          if [[ ! "$PR_URL" =~ ^https://[^/]+/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
+            echo "::error::pr-url is not a pull request URL"
+            exit 1
+          fi
+          repo="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+          number="${BASH_REMATCH[3]}"
+          author=$(gh api "repos/$repo/pulls/$number" | jq -r .user.login)
+          if [ "$author" != "dependabot[bot]" ]; then
+            exit 0
+          fi
+          clean=$(gh api "repos/$repo/pulls/$number/commits?per_page=100" | jq '
+            length > 0 and length < 100
+            and all(.[];
+              .author.login == "dependabot[bot]"
+              and .commit.verification.verified == true
+              and (if has("committer") then .committer.login == "web-flow" else true end))
+          ')
+          if [ "$clean" = true ]; then
+            exit 0
+          fi
+          if [ "$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest != null')" = true ]; then
+            gh pr merge --disable-auto "$PR_URL"
+          fi
+          gh api --paginate "repos/$repo/pulls/$number/reviews?per_page=100" \
+            | jq -r '.[] | select(.state == "APPROVED" and (.body | startswith("Approved by the Dependabot auto-merge workflow"))) | .id' \
+            | while read -r review_id; do
+                jq -n '{message: "The pull request has commits that were not made by Dependabot.", event: "DISMISS"}' \
+                  | gh api --method PUT "repos/$repo/pulls/$number/reviews/$review_id/dismissals" --input - > /dev/null
+              done
         env:
           PR_URL: ${{ inputs.pr-url }}
           GITHUB_TOKEN: ${{ secrets.repo-token }}
