@@ -1,0 +1,12 @@
+{
+  "name": "dependabot-auto-merge-tests",
+  "private": true,
+  "type": "module",
+  "description": "Fails while the Dependabot auto-merge workflow approves and squash-merges a head it did not verify.",
+  "scripts": {
+    "test": "node --test run-tests.mjs"
+  },
+  "dependencies": {
+    "yaml": "^2.6.1"
+  }
+}
