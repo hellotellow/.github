@@ -4,8 +4,8 @@ on:
   workflow_call:
     inputs:
       pr-url:
-        description: 'Pull Request URL'
-        required: true
+        description: 'Deprecated and ignored. The pull request of the triggering event is always used.'
+        required: false
         type: string
     secrets:
       repo-token:
@@ -27,18 +27,22 @@ jobs:
         with:
           github-token: ${{ secrets.repo-token }}
 
-      # Here the PR gets approved.
+      # fetch-metadata inspects github.event.pull_request, so approve and merge
+      # must target that same pull request. It can also leave update-type empty
+      # for updates it cannot classify, so only an explicit patch is accepted.
       - name: Approve a PR
+        if: ${{ steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch' }}
         run: gh pr review --approve "$PR_URL"
         env:
-          PR_URL: ${{ inputs.pr-url }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.repo-token }}
 
-      # Finally, this sets the PR to allow auto-merging for patch and minor
-      # updates if all checks pass
+      # --match-head-commit makes GitHub refuse the merge if the pull request
+      # head is no longer the commit this run was triggered for.
       - name: Enable auto-merge for Dependabot PRs
-        if: ${{ steps.dependabot-metadata.outputs.update-type != 'version-update:semver-minor' && steps.dependabot-metadata.outputs.update-type != 'version-update:semver-major' }}
-        run: gh pr merge --auto --squash "$PR_URL"
+        if: ${{ steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch' }}
+        run: gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" "$PR_URL"
         env:
-          PR_URL: ${{ inputs.pr-url }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GITHUB_TOKEN: ${{ secrets.repo-token }}
