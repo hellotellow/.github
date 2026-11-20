@@ -1,0 +1,12 @@
+{
+  "name": "auto-merge-workflow-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --import ./register-hook.mjs --test auto-merge-unknown-update-type.test.mjs"
+  },
+  "dependencies": {
+    "pluralize": "8.0.0",
+    "yaml": "2.4.0"
+  }
+}
