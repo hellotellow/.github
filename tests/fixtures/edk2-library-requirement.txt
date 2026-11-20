@@ -1,0 +1,14 @@
+pip: update edk2-pytool-library requirement from ~=0.23.4 to ~=0.23.18
+
+Updates the requirements on [edk2-pytool-library](https://github.com/tianocore/edk2-pytool-library) to permit the latest version.
+- [Release notes](https://github.com/tianocore/edk2-pytool-library/releases)
+- [Commits](https://github.com/tianocore/edk2-pytool-library/compare/v0.23.4...v0.23.18)
+
+---
+updated-dependencies:
+- dependency-name: edk2-pytool-library
+  dependency-version: 0.23.18
+  dependency-type: direct:production
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>

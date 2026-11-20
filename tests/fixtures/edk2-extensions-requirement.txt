@@ -1,0 +1,14 @@
+pip: update edk2-pytool-extensions requirement
+
+Updates the requirements on [edk2-pytool-extensions](https://github.com/tianocore/edk2-pytool-extensions) to permit the latest version.
+- [Release notes](https://github.com/tianocore/edk2-pytool-extensions/releases)
+- [Commits](https://github.com/tianocore/edk2-pytool-extensions/compare/v0.29.11...v0.31.4)
+
+---
+updated-dependencies:
+- dependency-name: edk2-pytool-extensions
+  dependency-version: 0.31.4
+  dependency-type: direct:production
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>

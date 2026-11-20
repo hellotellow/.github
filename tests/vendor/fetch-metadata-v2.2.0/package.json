@@ -1,0 +1,8 @@
+{
+  "name": "fetch-metadata-v2.2.0-under-test",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "@actions/core": "./actions-core-stub.js"
+  }
+}
